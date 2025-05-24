@@ -29,3 +29,5 @@ yarn-error.log*
 .vscode
 
 # .env
+# SpecStory explanation file
+.specstory/.what-is-this.md

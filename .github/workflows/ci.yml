@@ -1,0 +1,207 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: 1.5.0
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install Backend Dependencies
+      run: |
+        cd backend
+        npm ci
+
+    - name: Install Frontend Dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Run Backend Tests
+      run: |
+        cd backend
+        npm run test
+
+    - name: Run Frontend Tests
+      run: |
+        cd frontend
+        npm run test -- --coverage --watchAll=false
+
+    - name: Build Backend
+      run: |
+        cd backend
+        npm run build
+
+    - name: Build Frontend
+      run: |
+        cd frontend
+        npm run build
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: github.event_name == 'pull_request'
+    
+    defaults:
+      run:
+        working-directory: tf
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Terraform Format Check
+      run: terraform fmt -check -recursive
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Validate
+      run: terraform validate
+
+    - name: Terraform Plan
+      env:
+        TF_VAR_datadog_api_key: ${{ secrets.DATADOG_API_KEY }}
+        TF_VAR_datadog_app_key: ${{ secrets.DATADOG_APP_KEY }}
+      run: terraform plan -out=tfplan
+
+    - name: Upload Terraform Plan
+      uses: actions/upload-artifact@v4
+      with:
+        name: terraform-plan
+        path: tf/tfplan
+
+  deploy:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    
+    defaults:
+      run:
+        working-directory: tf
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Plan
+      env:
+        TF_VAR_datadog_api_key: ${{ secrets.DATADOG_API_KEY }}
+        TF_VAR_datadog_app_key: ${{ secrets.DATADOG_APP_KEY }}
+      run: terraform plan
+
+    - name: Terraform Apply
+      env:
+        TF_VAR_datadog_api_key: ${{ secrets.DATADOG_API_KEY }}
+        TF_VAR_datadog_app_key: ${{ secrets.DATADOG_APP_KEY }}
+      run: terraform apply -auto-approve
+
+    - name: Get Infrastructure Outputs
+      id: terraform-outputs
+      run: |
+        echo "backend_url=$(terraform output -raw backend_url)" >> $GITHUB_OUTPUT
+        echo "frontend_url=$(terraform output -raw frontend_url)" >> $GITHUB_OUTPUT
+        echo "dashboard_url=$(terraform output -raw datadog_dashboard_url)" >> $GITHUB_OUTPUT
+
+    - name: Create Deployment Summary
+      run: |
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Infrastructure deployed successfully!**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🌐 Application URLs:" >> $GITHUB_STEP_SUMMARY
+        echo "- **Backend API**: ${{ steps.terraform-outputs.outputs.backend_url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Frontend App**: ${{ steps.terraform-outputs.outputs.frontend_url }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 Monitoring:" >> $GITHUB_STEP_SUMMARY
+        echo "- **Datadog Dashboard**: ${{ steps.terraform-outputs.outputs.dashboard_url }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### ⏰ Deployment Details:" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Deployed by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Deployment time**: $(date)" >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    name: Notify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always()
+    
+    steps:
+    - name: Notify Success
+      if: needs.deploy.result == 'success'
+      run: |
+        echo "✅ Deployment completed successfully!"
+        echo "Infrastructure is now running on AWS with Datadog monitoring enabled."
+    
+    - name: Notify Failure
+      if: needs.deploy.result == 'failure'
+      run: |
+        echo "❌ Deployment failed!"
+        echo "Please check the logs for details."

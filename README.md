@@ -68,7 +68,7 @@ npm install
 ```
 cd backend
 npm run build
-````
+```
 4. Inicia el servidor backend:
 ```
 cd backend
@@ -159,4 +159,85 @@ POST http://localhost:3010/candidates
     }
 }
 ```
+
+## 🏗️ Infraestructura y Monitoreo
+
+Este proyecto incluye una configuración completa de infraestructura como código (IaC) usando Terraform, con integración de monitoreo avanzado mediante Datadog.
+
+### Características de Infraestructura
+
+- **Despliegue automatizado en AWS** usando Terraform
+- **Integración completa con Datadog** para monitoreo en tiempo real
+- **Agentes Datadog** instalados automáticamente en instancias EC2
+- **Dashboard personalizado** con métricas clave de infraestructura
+- **Alertas automatizadas** para problemas de rendimiento
+- **Monitoreo de contenedores Docker** y aplicaciones
+
+### Configuración de Infraestructura
+
+El directorio `tf/` contiene toda la configuración de Terraform:
+
+```
+tf/
+├── provider.tf              # Configuración de proveedores AWS y Datadog
+├── variables.tf             # Variables de configuración
+├── iam.tf                   # Roles y políticas IAM
+├── ec2.tf                   # Instancias EC2 con user data
+├── datadog.tf               # Integración Datadog y dashboard
+├── outputs.tf               # Outputs con URLs y información útil
+├── scripts/                 # Scripts de inicialización
+│   ├── backend_user_data.sh # Setup backend con Datadog agent
+│   └── frontend_user_data.sh# Setup frontend con Datadog agent
+├── terraform.tfvars.example # Ejemplo de configuración
+└── DATADOG_SETUP.md         # Documentación detallada
+```
+
+### Despliegue de Infraestructura
+
+1. **Prerrequisitos:**
+   - Cuenta AWS configurada
+   - Cuenta Datadog activa
+   - Terraform instalado (>= 1.0)
+
+2. **Configuración:**
+   ```bash
+   cd tf/
+   cp terraform.tfvars.example terraform.tfvars
+   # Editar terraform.tfvars con tus claves API de Datadog
+   ```
+
+3. **Despliegue:**
+   ```bash
+   terraform init
+   terraform plan
+   terraform apply
+   ```
+
+4. **Acceso al Monitoreo:**
+   - Dashboard Datadog: Disponible en outputs después del despliegue
+   - Métricas de infraestructura: CPU, memoria, disco, red
+   - Alertas automáticas: Alto uso de recursos, instancias caídas
+
+### Tecnologías y Patrones Utilizados
+
+#### Infraestructura
+- **Terraform** - Infrastructure as Code
+- **AWS EC2** - Instancias de aplicación
+- **AWS IAM** - Gestión de permisos y roles
+- **AWS CloudWatch** - Métricas básicas de AWS
+- **Amazon Linux 2** - Sistema operativo base
+
+#### Monitoreo
+- **Datadog** - Plataforma de monitoreo y observabilidad
+- **Datadog Agent** - Recolección de métricas del sistema
+- **CloudWatch Agent** - Métricas detalladas del sistema
+- **Docker Integration** - Monitoreo de contenedores
+
+#### Arquitectura
+- **Microservicios** - Frontend y backend separados
+- **Containerización** - Docker para aplicaciones
+- **Auto-scaling** - Preparado para escalado automático
+- **Tag-based Organization** - Gestión mediante tags
+
+Para información detallada sobre la configuración de monitoreo, consulta [`tf/DATADOG_SETUP.md`](./tf/DATADOG_SETUP.md).
 

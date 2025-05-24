@@ -1,0 +1,12 @@
+# Datadog Configuration
+# Get these values from your Datadog account:
+# - Go to https://app.datadoghq.com/organization-settings/api-keys
+# - Create API and APP keys
+
+datadog_api_key = "your-datadog-api-key-here"
+datadog_app_key = "your-datadog-app-key-here"
+datadog_site    = "datadoghq.com"  # Use "datadoghq.eu" for EU site
+
+# Project Configuration
+environment  = "dev"
+project_name = "lti-project" 
