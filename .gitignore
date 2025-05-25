@@ -31,3 +31,4 @@ yarn-error.log*
 # .env
 # SpecStory explanation file
 .specstory/.what-is-this.md
+**/terraform.tfvars
